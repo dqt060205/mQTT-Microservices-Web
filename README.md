@@ -243,7 +243,7 @@ JWT access tokens are used to authenticate protected requests.
 
 ## 7. Project Structure
 
-mQTT/
+mQTT-Microservices-Web/
 ├── frontend/
 │   ├── src/
 │   ├── public/

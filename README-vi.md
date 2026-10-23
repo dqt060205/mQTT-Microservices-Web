@@ -240,7 +240,7 @@ JWT được sử dụng để xác thực các request cần đăng nhập. Cá
 
 ## 7. Cấu trúc thư mục dự kiến
 
-mQTT/
+mQTT-Microservices-Web/
 ├── frontend/
 │   ├── src/
 │   ├── public/
