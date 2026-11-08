@@ -1,36 +1,33 @@
 {
   "name": "product-service",
   "version": "1.0.0",
-  "description": "Product and category microservice for the mQTT marketplace",
+  "description": "mQTT Product Service - manage IoT devices, components and categories",
   "private": true,
-  "type": "module",
   "main": "src/server.js",
-  "engines": {
-    "node": ">=20"
-  },
   "scripts": {
-    "dev": "nodemon src/server.js",
+    "dev": "node --watch src/server.js",
     "start": "node src/server.js",
     "test": "node --test",
     "prisma:generate": "prisma generate",
-    "db:migrate": "prisma migrate dev",
-    "db:deploy": "prisma migrate deploy",
-    "db:seed": "prisma db seed",
-    "db:studio": "prisma studio"
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:deploy": "prisma migrate deploy",
+    "prisma:seed": "node prisma/seed.js"
   },
-  "prisma": {
-    "seed": "node prisma/seed.js"
+  "engines": {
+    "node": ">=20"
   },
   "dependencies": {
-    "@prisma/client": "^6.19.0",
-    "cors": "^2.8.6",
-    "dotenv": "^18.0.9",
-    "express": "^5.3.0",
-    "helmet": "^8.1.0",
+    "@prisma/client": "^6.2.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "helmet": "^8.0.0",
     "jsonwebtoken": "^9.0.2",
-    "prisma": "^6.19.0"
+    "morgan": "^1.10.0",
+    "prisma": "^6.2.0",
+    "zod": "^3.24.1"
   },
   "devDependencies": {
-    "nodemon": "^3.1.14"
+    "supertest": "^7.0.0"
   }
 }

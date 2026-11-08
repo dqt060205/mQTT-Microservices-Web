@@ -1,14 +1,18 @@
-import { Router } from 'express';
-import * as categoryController from '../controllers/category.controller.js';
-import { requireAdmin } from '../middleware/auth.js';
-import { asyncHandler } from '../utils/async-handler.js';
+const { Router } = require('express');
+const { requireAdmin } = require('../middlewares/auth');
+const { createCategoryController } = require('../controllers/category.controller');
 
-const router = Router();
+function createCategoryRouter(categoryService) {
+  const router = Router();
+  const ctrl = createCategoryController(categoryService);
 
-router.get('/', asyncHandler(categoryController.listCategories));
-router.get('/:id', asyncHandler(categoryController.getCategory));
-router.post('/', requireAdmin, asyncHandler(categoryController.createCategory));
-router.patch('/:id', requireAdmin, asyncHandler(categoryController.updateCategory));
-router.delete('/:id', requireAdmin, asyncHandler(categoryController.deleteCategory));
+  router.get('/', ctrl.list);
+  router.get('/:id', ctrl.getOne);
+  router.post('/', requireAdmin, ctrl.create);
+  router.patch('/:id', requireAdmin, ctrl.update);
+  router.delete('/:id', requireAdmin, ctrl.delete);
 
-export default router;
+  return router;
+}
+
+module.exports = { createCategoryRouter };

@@ -1,56 +1,47 @@
-import * as productService from '../services/product.service.js';
-import {
-  parseProductBody,
-  parseProductQuery,
-  parseUuidParam
-} from '../validation/product.validation.js';
+const {
+  listProductsQuerySchema,
+  createProductSchema,
+  updateProductSchema,
+} = require('../validators/product.schema');
+const { toProductDTO } = require('../utils/serialize');
 
-export async function listProducts(req, res) {
-  const filters = parseProductQuery(req.query);
-  const result = await productService.listProducts(filters);
+const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
-  res.status(200).json({
-    success: true,
-    data: result.items,
-    meta: {
-      pagination: result.pagination
-    }
-  });
+function createProductController(productService) {
+  return {
+    list: asyncHandler(async (req, res) => {
+      const filters = listProductsQuerySchema.parse(req.query);
+      const result = await productService.listProducts(filters);
+      const items = result.items.map(toProductDTO);
+      res.json({
+        data: items,
+        items,
+        pagination: result.pagination,
+      });
+    }),
+
+    getOne: asyncHandler(async (req, res) => {
+      const product = await productService.getProductById(req.params.id);
+      res.json(toProductDTO(product));
+    }),
+
+    create: asyncHandler(async (req, res) => {
+      const input = createProductSchema.parse(req.body);
+      const product = await productService.createProduct(input);
+      res.status(201).json(toProductDTO(product));
+    }),
+
+    update: asyncHandler(async (req, res) => {
+      const input = updateProductSchema.parse(req.body);
+      const product = await productService.updateProduct(req.params.id, input);
+      res.json(toProductDTO(product));
+    }),
+
+    delete: asyncHandler(async (req, res) => {
+      await productService.deleteProduct(req.params.id);
+      res.status(204).end();
+    }),
+  };
 }
 
-export async function getProduct(req, res) {
-  const id = parseUuidParam(req.params.id);
-  const product = await productService.getProductById(id);
-
-  res.status(200).json({
-    success: true,
-    data: product
-  });
-}
-
-export async function createProduct(req, res) {
-  const input = parseProductBody(req.body);
-  const product = await productService.createProduct(input);
-
-  res.status(201).json({
-    success: true,
-    data: product
-  });
-}
-
-export async function updateProduct(req, res) {
-  const id = parseUuidParam(req.params.id);
-  const input = parseProductBody(req.body, { partial: true });
-  const product = await productService.updateProduct(id, input);
-
-  res.status(200).json({
-    success: true,
-    data: product
-  });
-}
-
-export async function deleteProduct(req, res) {
-  const id = parseUuidParam(req.params.id);
-  await productService.deleteProduct(id);
-  res.status(204).send();
-}
+module.exports = { createProductController };

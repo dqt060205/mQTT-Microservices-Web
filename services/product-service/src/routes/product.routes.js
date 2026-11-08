@@ -1,14 +1,18 @@
-import { Router } from 'express';
-import * as productController from '../controllers/product.controller.js';
-import { requireAdmin } from '../middleware/auth.js';
-import { asyncHandler } from '../utils/async-handler.js';
+const { Router } = require('express');
+const { requireAdmin } = require('../middlewares/auth');
+const { createProductController } = require('../controllers/product.controller');
 
-const router = Router();
+function createProductRouter(productService) {
+  const router = Router();
+  const ctrl = createProductController(productService);
 
-router.get('/', asyncHandler(productController.listProducts));
-router.get('/:id', asyncHandler(productController.getProduct));
-router.post('/', requireAdmin, asyncHandler(productController.createProduct));
-router.patch('/:id', requireAdmin, asyncHandler(productController.updateProduct));
-router.delete('/:id', requireAdmin, asyncHandler(productController.deleteProduct));
+  router.get('/', ctrl.list);
+  router.get('/:id', ctrl.getOne);
+  router.post('/', requireAdmin, ctrl.create);
+  router.patch('/:id', requireAdmin, ctrl.update);
+  router.delete('/:id', requireAdmin, ctrl.delete);
 
-export default router;
+  return router;
+}
+
+module.exports = { createProductRouter };
