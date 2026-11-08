@@ -1,69 +1,28 @@
-import 'dotenv/config';
-import app from './app.js';
-import prisma from './config/prisma.js';
+const env = require('./config/env');
 
-function getPort() {
-  const value = process.env.PORT ?? '3002';
-  const port = Number(value);
-
-  if (!Number.isInteger(port) || port < 1 || port > 65535) {
-    throw new Error('PORT must be an integer between 1 and 65535.');
-  }
-
-  return port;
+if (!env.jwtSecret) {
+  console.error('JWT_SECRET is required (see .env.example)');
+  process.exit(1);
 }
 
-const port = getPort();
-const server = app.listen(port, () => {
-  console.log('Product service running on port ' + port);
+const prisma = require('./lib/prisma');
+const { createProductService } = require('./services/product.service');
+const { createCategoryService } = require('./services/category.service');
+const { createApp } = require('./app');
+
+const productService = createProductService({ prisma });
+const categoryService = createCategoryService({ prisma });
+const app = createApp({ productService, categoryService });
+
+const server = app.listen(env.port, () => {
+  console.log(`product-service listening on :${env.port}`);
 });
 
-let shuttingDown = false;
-
-async function shutdown(signal, exitCode = 0) {
-  if (shuttingDown) {
-    return;
-  }
-
-  shuttingDown = true;
-  console.log(signal + ' received. Shutting down product service.');
-
-  const forceExitTimer = setTimeout(() => {
-    console.error('Graceful shutdown timed out.');
-    process.exit(1);
-  }, 10000);
-  forceExitTimer.unref();
-
-  server.close(async (serverError) => {
-    try {
-      await prisma.$disconnect();
-    } catch (databaseError) {
-      console.error('Failed to disconnect Prisma.', databaseError);
-      exitCode = 1;
-    }
-
-    if (serverError) {
-      console.error('HTTP server shutdown failed.', serverError);
-      exitCode = 1;
-    }
-
-    clearTimeout(forceExitTimer);
-    process.exit(exitCode);
-  });
+async function shutdown() {
+  server.close();
+  await prisma.$disconnect();
+  process.exit(0);
 }
 
-server.on('error', (error) => {
-  console.error('Product service failed to start.', error);
-  shutdown('SERVER_ERROR', 1);
-});
-
-process.on('SIGTERM', () => shutdown('SIGTERM'));
-process.on('SIGINT', () => shutdown('SIGINT'));
-process.on('unhandledRejection', (error) => {
-  console.error('Unhandled promise rejection.', error);
-  shutdown('UNHANDLED_REJECTION', 1);
-});
-process.on('uncaughtException', (error) => {
-  console.error('Uncaught exception.', error);
-  shutdown('UNCAUGHT_EXCEPTION', 1);
-});
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);

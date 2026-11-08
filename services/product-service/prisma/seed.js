@@ -1,22 +1,22 @@
-import 'dotenv/config';
-import prisma from '../src/config/prisma.js';
+require('dotenv').config();
+const prisma = require('../src/lib/prisma');
 
 const categories = [
   {
     name: 'Development Boards',
     slug: 'development-boards',
-    description: 'Boards for prototyping and building IoT applications.'
+    description: 'Boards for prototyping and building IoT applications.',
   },
   {
     name: 'Sensors',
     slug: 'sensors',
-    description: 'Sensors for temperature, humidity, motion, light and more.'
+    description: 'Sensors for temperature, humidity, motion, light and more.',
   },
   {
     name: 'Connectivity',
     slug: 'connectivity',
-    description: 'Modules for Wi-Fi, Bluetooth, LoRa and cellular connectivity.'
-  }
+    description: 'Modules for Wi-Fi, Bluetooth, LoRa and cellular connectivity.',
+  },
 ];
 
 async function main() {
@@ -26,7 +26,7 @@ async function main() {
     const saved = await prisma.category.upsert({
       where: { slug: category.slug },
       update: category,
-      create: category
+      create: category,
     });
     savedCategories[category.slug] = saved;
   }
@@ -40,7 +40,7 @@ async function main() {
       price: '12.90',
       stock: 50,
       imageUrl: 'https://images.example.com/products/esp32.jpg',
-      categoryId: savedCategories['development-boards'].id
+      categoryId: savedCategories['development-boards'].id,
     },
     {
       name: 'DHT22 Temperature and Humidity Sensor',
@@ -50,7 +50,7 @@ async function main() {
       price: '8.50',
       stock: 80,
       imageUrl: 'https://images.example.com/products/dht22.jpg',
-      categoryId: savedCategories.sensors.id
+      categoryId: savedCategories.sensors.id,
     },
     {
       name: 'LoRa SX1278 Module',
@@ -60,15 +60,15 @@ async function main() {
       price: '9.75',
       stock: 35,
       imageUrl: 'https://images.example.com/products/lora-sx1278.jpg',
-      categoryId: savedCategories.connectivity.id
-    }
+      categoryId: savedCategories.connectivity.id,
+    },
   ];
 
   for (const product of products) {
     await prisma.product.upsert({
       where: { sku: product.sku },
       update: product,
-      create: product
+      create: product,
     });
   }
 }

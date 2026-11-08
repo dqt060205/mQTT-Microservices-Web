@@ -1,313 +1,225 @@
 # Product Service
 
-Product Service quản lý danh mục và sản phẩm IoT của hệ thống mQTT. Service được xây dựng bằng Node.js, Express, Prisma ORM và PostgreSQL; có thể chạy độc lập hoặc được gọi thông qua API Gateway.
+Microservice quản lý thiết bị, linh kiện IoT và danh mục sản phẩm trong nền tảng **mQTT**. Dữ liệu được quản lý trong cơ sở dữ liệu PostgreSQL riêng (`product_db`), cung cấp RESTful API cho Frontend, Cart Service và Order Service.
 
-## Chức năng đã triển khai
+- Node.js 20+, Express, Prisma + PostgreSQL, Zod, JWT
+- Cổng mặc định: `3002`
+- API xem dữ liệu (`GET`) hoàn toàn public, không yêu cầu xác thực.
+- Các API ghi dữ liệu (`POST`, `PATCH`, `DELETE`) yêu cầu header `Authorization: Bearer <jwt>` với quyền `admin` (`role === 'admin'` hoặc `roles: ['admin']`), dùng chung `JWT_SECRET` với `user-service`.
+- Cung cấp hợp đồng dữ liệu chuẩn `GET /api/products/:id` trả về `{ id, name, price, stock, imageUrl, ... }` để Cart Service và Order Service tích hợp trực tiếp.
 
-- CRUD sản phẩm và danh mục.
-- Tìm kiếm sản phẩm theo tên, SKU hoặc mô tả.
-- Lọc theo danh mục, khoảng giá và trạng thái còn hàng.
-- Phân trang và sắp xếp danh sách sản phẩm.
-- Validation request và định dạng lỗi JSON thống nhất.
-- Xác thực JWT và kiểm tra quyền admin cho API ghi dữ liệu.
-- Health check, readiness check và graceful shutdown.
-- Prisma schema, migration khởi tạo và dữ liệu seed.
-- Dockerfile để đóng gói service.
-- Unit test cho validation và chuẩn hóa dữ liệu.
+---
 
-## Cấu trúc thư mục
+## 1. API Endpoints
 
-    product-service/
-    ├── prisma/
-    │   ├── migrations/
-    │   ├── schema.prisma
-    │   └── seed.js
-    ├── src/
-    │   ├── config/
-    │   ├── controllers/
-    │   ├── middleware/
-    │   ├── routes/
-    │   ├── services/
-    │   ├── utils/
-    │   ├── validation/
-    │   ├── app.js
-    │   └── server.js
-    ├── test/
-    ├── .env.example
-    ├── Dockerfile
-    └── package.json
+### 1.1 Endpoint hệ thống
 
-Luồng xử lý request:
-
-    Route -> Auth/Validation -> Controller -> Service -> Prisma -> PostgreSQL
-
-## Mô hình dữ liệu
-
-### Category
-
-| Trường | Kiểu | Ghi chú |
-|---|---|---|
-| id | UUID | Khóa chính |
-| name | String | Tên duy nhất |
-| slug | String | Slug duy nhất |
-| description | String, nullable | Mô tả |
-| createdAt | DateTime | Thời điểm tạo |
-| updatedAt | DateTime | Thời điểm cập nhật |
-
-### Product
-
-| Trường | Kiểu | Ghi chú |
-|---|---|---|
-| id | UUID | Khóa chính |
-| name | String | Tên sản phẩm |
-| slug | String | Slug duy nhất |
-| sku | String | Mã SKU duy nhất, được chuẩn hóa thành chữ hoa |
-| description | String, nullable | Mô tả sản phẩm |
-| price | Decimal(12,2) | Giá lớn hơn 0 |
-| stock | Integer | Tồn kho không âm |
-| imageUrl | String, nullable | URL HTTP hoặc HTTPS |
-| categoryId | UUID, nullable | Danh mục của sản phẩm |
-| createdAt | DateTime | Thời điểm tạo |
-| updatedAt | DateTime | Thời điểm cập nhật |
-
-Giá được trả về API dưới dạng chuỗi, ví dụ "12.90", để tránh sai số số thực khi truyền dữ liệu tiền tệ.
-
-## API
-
-Base URL khi chạy trực tiếp:
-
-    http://localhost:3002
-
-### Endpoint hệ thống
-
-| Method | Endpoint | Quyền | Chức năng |
+| Method | Endpoint | Quyền | Mô tả |
 |---|---|---|---|
-| GET | / | Public | Thông tin service |
-| GET | /health | Public | Liveness check, không truy vấn database |
-| GET | /ready | Public | Readiness check, có truy vấn database |
+| GET | `/health` | Public | Liveness check (không gọi DB) |
+| GET | `/ready` | Public | Readiness check (kiểm tra kết nối PostgreSQL) |
 
-### Endpoint sản phẩm
+### 1.2 Endpoint sản phẩm
 
-| Method | Endpoint | Quyền | Chức năng |
+| Method | Endpoint | Quyền | Mô tả |
 |---|---|---|---|
-| GET | /api/products | Public | Danh sách, tìm kiếm và lọc sản phẩm |
-| GET | /api/products/:id | Public | Chi tiết sản phẩm |
-| POST | /api/products | Admin | Tạo sản phẩm |
-| PATCH | /api/products/:id | Admin | Cập nhật một phần sản phẩm |
-| DELETE | /api/products/:id | Admin | Xóa sản phẩm |
+| GET | `/api/products` | Public | Danh sách sản phẩm (hỗ trợ phân trang, tìm kiếm, lọc danh mục/giá/tồn kho) |
+| GET | `/api/products/:id` | Public | Chi tiết 1 sản phẩm theo ID hoặc UUID |
+| POST | `/api/products` | Admin | Tạo sản phẩm mới |
+| PATCH | `/api/products/:id` | Admin | Cập nhật thông tin sản phẩm |
+| DELETE | `/api/products/:id` | Admin | Xóa sản phẩm |
 
-Query của GET /api/products:
+### 1.3 Endpoint danh mục
 
-| Tham số | Mặc định | Mô tả |
-|---|---|---|
-| page | 1 | Trang hiện tại |
-| limit | 20 | Số bản ghi, tối đa 100 |
-| search | - | Tìm trong name, sku và description |
-| category | - | UUID hoặc slug của danh mục |
-| minPrice | - | Giá thấp nhất |
-| maxPrice | - | Giá cao nhất |
-| inStock | - | true để lấy sản phẩm còn hàng, false để lấy sản phẩm hết hàng |
-| sortBy | createdAt | createdAt, name, price hoặc stock |
-| sortOrder | desc | asc hoặc desc |
+| Method | Endpoint | Quyền | Mô tả |
+|---|---|---|---|
+| GET | `/api/categories` | Public | Danh sách tất cả danh mục kèm số lượng sản phẩm (`productCount`) |
+| GET | `/api/categories/:id` | Public | Chi tiết danh mục theo ID |
+| POST | `/api/categories` | Admin | Tạo danh mục mới |
+| PATCH | `/api/categories/:id` | Admin | Cập nhật danh mục |
+| DELETE | `/api/categories/:id` | Admin | Xóa danh mục rỗng (báo lỗi 409 nếu còn sản phẩm) |
 
-Ví dụ:
+---
 
-    GET /api/products?search=sensor&category=sensors&minPrice=5&maxPrice=50&inStock=true&page=1&limit=10&sortBy=price&sortOrder=asc
+## 2. Dữ liệu mẫu (Request & Response)
 
-Payload tạo sản phẩm:
+### GET `/api/products`
+Query parameters hỗ trợ:
+`page`, `limit`, `search`, `category` (UUID hoặc slug), `minPrice`, `maxPrice`, `inStock` (`true`/`false`), `sortBy` (`createdAt`, `name`, `price`, `stock`), `sortOrder` (`asc`, `desc`).
 
+Response:
+```json
+{
+  "data": [
     {
+      "id": "d946248e-752f-433d-81a7-a243350d27d3",
       "name": "ESP32 Development Board",
+      "slug": "esp32-development-board",
       "sku": "MQTT-ESP32-001",
-      "description": "Wi-Fi and Bluetooth development board",
+      "description": "Dual-core Wi-Fi and Bluetooth development board",
       "price": "12.90",
       "stock": 50,
       "imageUrl": "https://images.example.com/products/esp32.jpg",
-      "categoryId": "0fbb3a3d-6fb4-4fb7-95b1-30c1046069fd"
-    }
-
-Trường slug không bắt buộc khi tạo. Service tự sinh slug từ name. Khi cập nhật name, slug cũ được giữ nguyên; gửi thêm slug nếu muốn thay đổi URL thân thiện.
-
-Response danh sách:
-
-    {
-      "success": true,
-      "data": [
-        {
-          "id": "d946248e-752f-433d-81a7-a243350d27d3",
-          "name": "ESP32 Development Board",
-          "slug": "esp32-development-board",
-          "sku": "MQTT-ESP32-001",
-          "description": "Wi-Fi and Bluetooth development board",
-          "price": "12.90",
-          "stock": 50,
-          "imageUrl": "https://images.example.com/products/esp32.jpg",
-          "categoryId": "0fbb3a3d-6fb4-4fb7-95b1-30c1046069fd",
-          "category": {
-            "id": "0fbb3a3d-6fb4-4fb7-95b1-30c1046069fd",
-            "name": "Development Boards",
-            "slug": "development-boards"
-          }
-        }
-      ],
-      "meta": {
-        "pagination": {
-          "page": 1,
-          "limit": 20,
-          "total": 1,
-          "totalPages": 1
-        }
+      "categoryId": "0fbb3a3d-6fb4-4fb7-95b1-30c1046069fd",
+      "category": {
+        "id": "0fbb3a3d-6fb4-4fb7-95b1-30c1046069fd",
+        "name": "Development Boards",
+        "slug": "development-boards"
       }
     }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "total": 1,
+    "totalPages": 1
+  }
+}
+```
 
-### Endpoint danh mục
+### GET `/api/products/:id`
+```json
+{
+  "id": "d946248e-752f-433d-81a7-a243350d27d3",
+  "name": "ESP32 Development Board",
+  "slug": "esp32-development-board",
+  "sku": "MQTT-ESP32-001",
+  "description": "Dual-core Wi-Fi and Bluetooth development board",
+  "price": "12.90",
+  "stock": 50,
+  "imageUrl": "https://images.example.com/products/esp32.jpg",
+  "categoryId": "0fbb3a3d-6fb4-4fb7-95b1-30c1046069fd",
+  "category": {
+    "id": "0fbb3a3d-6fb4-4fb7-95b1-30c1046069fd",
+    "name": "Development Boards",
+    "slug": "development-boards"
+  }
+}
+```
 
-| Method | Endpoint | Quyền | Chức năng |
-|---|---|---|---|
-| GET | /api/categories | Public | Danh sách danh mục và số sản phẩm |
-| GET | /api/categories/:id | Public | Chi tiết danh mục |
-| POST | /api/categories | Admin | Tạo danh mục |
-| PATCH | /api/categories/:id | Admin | Cập nhật danh mục |
-| DELETE | /api/categories/:id | Admin | Xóa danh mục rỗng |
+### POST `/api/products` (Yêu cầu Admin JWT)
+Body:
+```json
+{
+  "name": "ESP32 Development Board",
+  "sku": "mqtt-esp32-001",
+  "price": 12.90,
+  "stock": 50,
+  "imageUrl": "https://images.example.com/products/esp32.jpg",
+  "categoryId": "0fbb3a3d-6fb4-4fb7-95b1-30c1046069fd"
+}
+```
+*Ghi chú: Trường `slug` sẽ được tự động tạo từ `name` (hỗ trợ cả tiếng Việt có dấu, ví dụ: "Cảm biến Nhiệt độ" $\rightarrow$ "cam-bien-nhiet-do"). Mã `sku` tự động chuyển thành chữ in hoa.*
 
-Service trả về HTTP 409 nếu xóa một danh mục vẫn còn sản phẩm.
+---
 
-Payload tạo danh mục:
+## 3. Cấu trúc thư mục
 
-    {
-      "name": "Sensors",
-      "description": "Temperature, humidity, light and motion sensors"
-    }
+```text
+product-service/
+├── prisma/
+│   ├── migrations/
+│   ├── schema.prisma
+│   └── seed.js
+├── src/
+│   ├── config/
+│   │   └── env.js            # Cấu hình biến môi trường
+│   ├── controllers/
+│   │   ├── category.controller.js
+│   │   └── product.controller.js
+│   ├── lib/
+│   │   ├── errors.js         # Lớp AppError chuẩn
+│   │   └── prisma.js         # Khởi tạo PrismaClient
+│   ├── middlewares/
+│   │   ├── auth.js           # Xác thực JWT & phân quyền Admin
+│   │   └── error.js          # Xử lý lỗi toàn cục và Zod validation
+│   ├── routes/
+│   │   ├── category.routes.js
+│   │   └── product.routes.js
+│   ├── services/
+│   │   ├── category.service.js
+│   │   └── product.service.js
+│   ├── utils/
+│   │   ├── serialize.js      # Chuẩn hóa DTO (Price Decimal -> string/number)
+│   │   └── slug.js           # Hàm sinh slug tiếng Việt chuẩn SEO
+│   ├── validators/
+│   │   ├── category.schema.js# Schema Zod cho danh mục
+│   │   └── product.schema.js # Schema Zod cho sản phẩm
+│   ├── app.js                # Factory function createApp
+│   └── server.js             # Khởi chạy server và graceful shutdown
+├── test/
+│   ├── category.routes.test.js
+│   └── product.routes.test.js
+├── .dockerignore
+├── .env.example
+├── .gitignore
+├── Dockerfile
+├── package.json
+└── README.md
+```
 
-## Xác thực API quản trị
+---
 
-Các request POST, PATCH và DELETE phải gửi access token:
+## 4. Hướng dẫn chạy cục bộ (Local Development)
 
-    Authorization: Bearer <access-token>
+```bash
+cd services/product-service
+cp .env.example .env
+# Chỉnh sửa DATABASE_URL và JWT_SECRET nếu cần
 
-Product Service xác minh token bằng JWT_SECRET và chỉ chấp nhận thuật toán HS256. Payload token cần có một trong hai dạng:
+npm install
+npm run prisma:generate
+npm run prisma:migrate
+npm run prisma:seed # Nạp dữ liệu mẫu ban đầu
+npm run dev
+```
 
-    {
-      "sub": "user-id",
-      "role": "admin"
-    }
+---
 
-hoặc:
+## 5. Chạy kiểm thử tự động (Unit / Integration Tests)
 
-    {
-      "sub": "user-id",
-      "roles": ["admin"]
-    }
+```bash
+npm test
+```
+Bộ kiểm thử chạy bằng test runner tích hợp của Node.js (`node --test`) và `supertest`, kiểm tra 12 kịch bản:
+- Public health check
+- Lấy danh sách sản phẩm & danh mục
+- Chi tiết sản phẩm trả trực tiếp DTO
+- Chặn request khi thiếu JWT hoặc không phải Admin
+- Xác thực dữ liệu đầu vào bằng Zod
+- Tạo sản phẩm, sinh slug tự động
+- Cập nhật và xóa sản phẩm/danh mục
 
-JWT_SECRET phải giống secret mà User Service dùng để ký access token. Trong môi trường production, Product Service chỉ nên được truy cập qua API Gateway hoặc mạng nội bộ.
+---
 
-## Biến môi trường
+## 6. Docker & Docker Compose
 
-Tạo file .env từ .env.example:
+### Build Docker Image
+```bash
+docker build -t mqtt-product-service .
+```
 
-| Biến | Bắt buộc | Mặc định | Mô tả |
-|---|---|---|---|
-| NODE_ENV | Không | development | Môi trường chạy |
-| PORT | Không | 3002 | Cổng HTTP |
-| DATABASE_URL | Có | - | PostgreSQL connection string |
-| JWT_SECRET | Có cho API admin | - | Secret dùng xác minh JWT |
-| CORS_ORIGIN | Không | * | Danh sách origin cách nhau bằng dấu phẩy |
+### Mẫu cấu hình trong `compose.yaml`
+```yaml
+  product-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: product_db
+    volumes:
+      - product_db_data:/var/lib/postgresql/data
 
-Không commit file .env chứa thông tin thật.
+  product-service:
+    build: ./services/product-service
+    environment:
+      PORT: 3002
+      DATABASE_URL: postgresql://postgres:postgres@product-db:5432/product_db?schema=public
+      JWT_SECRET: ${JWT_SECRET}
+    depends_on:
+      - product-db
+    restart: unless-stopped
 
-## Chạy local
-
-Yêu cầu:
-
-- Node.js 20 trở lên.
-- PostgreSQL.
-
-Từ thư mục product-service:
-
-    Copy-Item .env.example .env
-    npm install
-    npm run prisma:generate
-    npm run db:deploy
-    npm run db:seed
-    npm run dev
-
-Nếu muốn tạo nhanh PostgreSQL bằng Docker:
-
-    docker run --name mqtt-product-db -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=product_db -p 5432:5432 -d postgres:17-alpine
-
-Migration đã được commit trong prisma/migrations. Khi thay đổi schema trong quá trình phát triển:
-
-    npm run db:migrate -- --name describe_the_change
-
-Khi triển khai:
-
-    npm run db:deploy
-
-## Chạy bằng Docker
-
-Build image:
-
-    docker build -t mqtt-product-service .
-
-Chạy container khi PostgreSQL ở máy host:
-
-    docker run --rm -p 3002:3002 -e PORT=3002 -e DATABASE_URL=postgresql://postgres:postgres@host.docker.internal:5432/product_db?schema=public -e JWT_SECRET=replace-me mqtt-product-service
-
-Container tự chạy prisma migrate deploy trước khi khởi động HTTP server.
-
-## Kiểm thử
-
-Chạy unit test:
-
-    npm test
-
-Các test hiện tại kiểm tra:
-
-- Sinh slug từ tiếng Việt.
-- Chuẩn hóa SKU và price.
-- Validation giá và tồn kho.
-- Validation PATCH rỗng.
-- Validation query tìm kiếm, lọc, phân trang và sắp xếp.
-
-Để kiểm thử tích hợp API đầy đủ, cần cấu hình PostgreSQL và chạy migration trước.
-
-## Định dạng lỗi
-
-Ví dụ lỗi validation:
-
-    {
-      "success": false,
-      "error": {
-        "code": "VALIDATION_ERROR",
-        "message": "Request validation failed.",
-        "requestId": "6f79ed84-7e83-4de7-ad39-96823aa92658",
-        "details": [
-          {
-            "field": "price",
-            "message": "price must be greater than zero."
-          }
-        ]
-      }
-    }
-
-Mỗi response có header x-request-id. Gateway có thể truyền sẵn header này để đối chiếu log giữa các service.
-
-Các status code chính:
-
-| Status | Ý nghĩa |
-|---|---|
-| 200, 201, 204 | Thành công |
-| 400 | Payload, UUID hoặc query không hợp lệ |
-| 401 | Thiếu token hoặc token không hợp lệ |
-| 403 | Không có quyền admin hoặc origin bị chặn |
-| 404 | Không tìm thấy route hoặc tài nguyên |
-| 409 | Trùng slug/SKU/name hoặc danh mục chưa rỗng |
-| 500 | Lỗi cấu hình hoặc lỗi nội bộ |
-
-## Ghi chú tích hợp
-
-- API Gateway nên chuyển nguyên header Authorization và x-request-id tới service.
-- User Service và Product Service phải dùng cùng JWT_SECRET và thống nhất claim role.
-- Order Service và Cart Service chỉ nên đọc thông tin sản phẩm qua API, không truy cập trực tiếp product_db.
-- Giá sản phẩm cần được lưu snapshot tại Order Service khi tạo đơn hàng.
-- Thao tác trừ tồn kho cần bổ sung transaction hoặc cơ chế reservation khi triển khai luồng checkout.
+volumes:
+  product_db_data:
+```
