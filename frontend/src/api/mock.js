@@ -27,6 +27,11 @@ const PRODUCTS = [
   P(12, 'SSD1306 0.96" OLED Display (I2C)', 'Displays', 59000, 150, 4.6, 2860, 'Compact 128x64 monochrome OLED for sensor readouts and menus.', ['128x64 pixels, I2C', 'Self-lit, high contrast', '3.3-5 V supply', 'Adafruit_SSD1306 and U8g2 libraries']),
 ];
 
+// Admin edits are saved in localStorage; until the first edit the seed list above is used.
+const PRODUCT_KEY = 'mqtt_mock_products';
+const products = () => read(PRODUCT_KEY, PRODUCTS);
+const saveProducts = (list) => write(PRODUCT_KEY, list);
+
 const TUTORIALS = [
   { id: 't1', productId: '1', title: 'Blink an LED on ESP32-S3 with Arduino IDE', level: 'Beginner', minutes: 10, summary: 'Install the board package, upload your first sketch and check the serial monitor.' },
   { id: 't2', productId: '1', title: 'Publish sensor data over MQTT from an ESP32', level: 'Intermediate', minutes: 25, summary: 'Connect to WiFi, reach a broker and publish JSON readings every few seconds.' },
@@ -41,6 +46,10 @@ const users = () => {
   const list = read('mqtt_mock_users', []);
   if (!list.length) {
     list.push({ id: 'u1', name: 'Demo User', email: 'demo@mqtt.dev', password: 'demo1234', role: 'user' });
+    write('mqtt_mock_users', list);
+  }
+  if (!list.some((u) => u.role === 'admin')) {
+    list.push({ id: 'u0', name: 'Admin', email: 'admin@mqtt.dev', password: 'admin1234', role: 'admin' });
     write('mqtt_mock_users', list);
   }
   return list;
@@ -77,7 +86,7 @@ export async function me() {
 export async function listProducts({ q, category } = {}) {
   await delay();
   const term = (q || '').trim().toLowerCase();
-  return PRODUCTS.filter(
+  return products().filter(
     (p) =>
       (!category || p.category === category) &&
       (!term || `${p.name} ${p.description} ${p.category}`.toLowerCase().includes(term)),
@@ -85,7 +94,7 @@ export async function listProducts({ q, category } = {}) {
 }
 export async function getProduct(id) {
   await delay(80);
-  const p = PRODUCTS.find((x) => x.id === String(id));
+  const p = products().find((x) => x.id === String(id));
   if (!p) throw fail('Product not found', 404);
   return p;
 }
@@ -94,11 +103,91 @@ export async function getTutorialsByProduct(productId) {
   return TUTORIALS.filter((t) => t.productId === String(productId));
 }
 
+// ---- sort / filter / paging (same contract as real.js) ----
+const SORTS = {
+  newest: (a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0), // seed products have no createdAt: keep their order
+  'price-asc': (a, b) => a.price - b.price,
+  'price-desc': (a, b) => b.price - a.price,
+  name: (a, b) => a.name.localeCompare(b.name),
+};
+export async function searchProducts({ q, category, sort = 'newest', minPrice, maxPrice, inStock, page = 1, limit = 12 } = {}) {
+  await delay();
+  const term = (q || '').trim().toLowerCase();
+  const list = products().filter(
+    (p) =>
+      (!category || p.category === category) &&
+      (!term || `${p.name} ${p.sku ?? ''} ${p.description} ${p.category}`.toLowerCase().includes(term)) &&
+      (minPrice === undefined || p.price >= minPrice) &&
+      (maxPrice === undefined || p.price <= maxPrice) &&
+      (!inStock || p.stock > 0),
+  );
+  list.sort(SORTS[sort] ?? SORTS.newest); // Array.prototype.sort is stable
+  const total = list.length;
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  const current = Math.min(Math.max(1, page), totalPages);
+  return {
+    items: list.slice((current - 1) * limit, current * limit),
+    pagination: { page: current, limit, total, totalPages },
+  };
+}
+
+// slug = name so the category filter (which compares names) keeps working
+const CATEGORY_NAMES = ['Boards', 'Sensors', 'Wireless', 'Actuators', 'Displays'];
+export async function listCategories() {
+  await delay(50);
+  return CATEGORY_NAMES.map((name) => ({ id: name, name, slug: name }));
+}
+
+// ---- product admin ----
+function requireAdmin() {
+  if (currentUser().role !== 'admin') throw fail('Administrator permission is required.', 403);
+}
+const fromForm = (f) => ({
+  name: f.name.trim(),
+  sku: f.sku.trim().toUpperCase(),
+  description: f.description.trim(),
+  price: Number(f.price),
+  stock: Number(f.stock),
+  imageUrl: f.imageUrl.trim() || null,
+  category: f.categoryId || '',
+});
+export async function createProduct(form) {
+  await delay(200);
+  requireAdmin();
+  const list = products();
+  const data = fromForm(form);
+  if (list.some((p) => p.sku === data.sku)) throw fail('A product with this SKU already exists.', 409);
+  const product = { ...data, id: String(Date.now()), createdAt: Date.now() };
+  saveProducts([product, ...list]);
+  return product;
+}
+export async function updateProduct(id, form) {
+  await delay(200);
+  requireAdmin();
+  const list = products();
+  const index = list.findIndex((p) => p.id === String(id));
+  if (index < 0) throw fail('Product was not found.', 404);
+  const data = fromForm(form);
+  if (list.some((p) => p.sku === data.sku && p.id !== list[index].id)) throw fail('A product with this SKU already exists.', 409);
+  list[index] = { ...list[index], ...data };
+  saveProducts(list);
+  return list[index];
+}
+export async function deleteProduct(id) {
+  await delay(150);
+  requireAdmin();
+  const list = products();
+  if (!list.some((p) => p.id === String(id))) throw fail('Product was not found.', 404);
+  saveProducts(list.filter((p) => p.id !== String(id)));
+}
+
 // ---- cart ----
 const cartKey = () => `mqtt_mock_cart:${currentUser().id}`;
 export async function getCart() {
   await delay(60);
-  return read(cartKey(), []).map((i) => ({ ...i, product: PRODUCTS.find((p) => p.id === i.productId) }));
+  return read(cartKey(), [])
+    .map((i) => ({ ...i, product: products().find((p) => p.id === i.productId) }))
+    .filter((i) => i.product); // product may have been deleted by an admin
 }
 export async function addCartItem(productId, quantity = 1) {
   await delay(60);
@@ -127,7 +216,8 @@ export async function createOrder(shipping) {
   const cart = read(cartKey(), []);
   if (!cart.length) throw fail('Cart is empty');
   const items = cart.map((i) => {
-    const p = PRODUCTS.find((x) => x.id === i.productId);
+    const p = products().find((x) => x.id === i.productId);
+    if (!p) throw fail('A product in your cart is no longer available', 409);
     if (p.stock < i.quantity) throw fail(`Not enough stock for "${p.name}"`, 409);
     return { id: `oi${Math.random().toString(36).slice(2)}`, productId: p.id, productName: p.name, unitPrice: p.price, quantity: i.quantity };
   });
