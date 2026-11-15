@@ -4,12 +4,21 @@ import { config } from '../config/env.js';
 export function buildCorsMiddleware() {
   const originSetting = config.corsOrigin.trim();
 
+  const standardAllowedHeaders = [
+    'Content-Type',
+    'Authorization',
+    'X-Requested-With',
+    'Accept',
+    'Idempotency-Key',
+    'X-Request-Id',
+  ];
+
   if (!originSetting || originSetting === '*') {
     return cors({
       origin: true,
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+      allowedHeaders: standardAllowedHeaders,
     });
   }
 
@@ -28,7 +37,6 @@ export function buildCorsMiddleware() {
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+    allowedHeaders: standardAllowedHeaders,
   });
 }
-
