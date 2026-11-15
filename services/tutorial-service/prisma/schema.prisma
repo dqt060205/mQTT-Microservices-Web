@@ -1,0 +1,32 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Tutorial {
+  id          String   @id @default(uuid()) @db.Uuid
+  title       String   @db.VarChar(180)
+  slug        String   @unique @db.VarChar(220)
+  excerpt     String?  @db.Text
+  content     String   @db.Text
+  imageUrl    String?  @map("image_url") @db.VarChar(2048)
+  videoUrl    String?  @map("video_url") @db.VarChar(2048)
+  productId   String?  @map("product_id") @db.Uuid
+  category    String?  @db.VarChar(100)
+  difficulty  String?  @db.VarChar(40)
+  readTime    Int      @default(0) @map("read_time")
+  isPublished Boolean  @default(false) @map("is_published")
+  authorName  String?  @map("author_name") @db.VarChar(120)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([productId])
+  @@index([category])
+  @@index([isPublished])
+  @@index([createdAt])
+  @@map("tutorials")
+}
