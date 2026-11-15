@@ -60,3 +60,10 @@ npm test
 ## Docker
 
 Build context phải là thư mục service: `docker build -t mqtt-tutorial-service services/tutorial-service`.
+
+## TODO
+
+- Tích hợp Tutorial Service vào API Gateway
+- Thêm proxy route cho /api/tutorials
+- Sửa compose.yaml để khởi động tutorial-db + tutorial-service
+- Chuẩn hóa dữ liệu theo đúng format của frontend mQTT
