@@ -22,11 +22,13 @@ export function createServiceProxy(serviceDef) {
         );
 
         if (!res.headersSent) {
+          const errorMessage = `Dịch vụ '${serviceDef.name}' (${serviceDef.id}) tạm thời không thể truy cập hoặc đã quá thời gian chờ.`;
           res.status(503).json({
             success: false,
+            message: errorMessage,
             error: {
               code: 'SERVICE_UNAVAILABLE',
-              message: `Dịch vụ '${serviceDef.name}' (${serviceDef.id}) tạm thời không thể truy cập hoặc đã quá thời gian chờ.`,
+              message: errorMessage,
               service: serviceDef.id,
               target: serviceDef.url,
               timestamp: new Date().toISOString(),
@@ -37,4 +39,3 @@ export function createServiceProxy(serviceDef) {
     },
   });
 }
-
