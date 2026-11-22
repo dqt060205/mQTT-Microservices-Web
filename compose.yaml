@@ -1,0 +1,210 @@
+# mQTT - run the whole stack:  docker compose up -d --build
+# Needs a .env file next to this one (copy .env.example and fill in the secrets).
+#
+# Networks (least privilege):
+#   edge    = frontend <-> api-gateway
+#   backend = api-gateway <-> services <-> postgres   (frontend and the browser cannot reach it)
+
+name: mqtt
+
+x-service: &service
+  restart: unless-stopped
+  networks: [backend]
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      USER_DB_PASSWORD: ${USER_DB_PASSWORD:?Set USER_DB_PASSWORD in .env}
+      PRODUCT_DB_PASSWORD: ${PRODUCT_DB_PASSWORD:?Set PRODUCT_DB_PASSWORD in .env}
+      CART_DB_PASSWORD: ${CART_DB_PASSWORD:?Set CART_DB_PASSWORD in .env}
+      ORDER_DB_PASSWORD: ${ORDER_DB_PASSWORD:?Set ORDER_DB_PASSWORD in .env}
+      PAYMENT_DB_PASSWORD: ${PAYMENT_DB_PASSWORD:?Set PAYMENT_DB_PASSWORD in .env}
+      TUTORIAL_DB_PASSWORD: ${TUTORIAL_DB_PASSWORD:?Set TUTORIAL_DB_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infrastructure/docker/postgres/init-databases.sh:/docker-entrypoint-initdb.d/10-init-databases.sh:ro
+    healthcheck:
+      # -h 127.0.0.1: during first-time init Postgres only listens on a unix socket,
+      # so a TCP check only passes once the init scripts have finished.
+      test: ["CMD-SHELL", "pg_isready -U postgres -h 127.0.0.1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [backend]
+
+  user-service:
+    <<: *service
+    build: ./services/user-service
+    environment:
+      NODE_ENV: production
+      PORT: "3001"
+      DATABASE_URL: postgresql://user_svc:${USER_DB_PASSWORD}@postgres:5432/user_db?schema=public
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:8081}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 25s
+
+  product-service:
+    <<: *service
+    build: ./services/product-service
+    environment:
+      NODE_ENV: production
+      PORT: "3002"
+      DATABASE_URL: postgresql://product_svc:${PRODUCT_DB_PASSWORD}@postgres:5432/product_db?schema=public
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3002/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 25s
+
+  cart-service:
+    <<: *service
+    build: ./services/cart-service
+    environment:
+      NODE_ENV: production
+      PORT: "3003"
+      DATABASE_URL: postgresql://cart_svc:${CART_DB_PASSWORD}@postgres:5432/cart_db?schema=public
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      PRODUCT_SERVICE_URL: http://product-service:3002
+      REQUEST_TIMEOUT_MS: "5000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3003/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 25s
+
+  order-service:
+    <<: *service
+    build: ./services/order-service
+    environment:
+      NODE_ENV: production
+      PORT: "3004"
+      DATABASE_URL: postgresql://order_svc:${ORDER_DB_PASSWORD}@postgres:5432/order_db?schema=public
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      CART_SERVICE_URL: http://cart-service:3003
+      PRODUCT_SERVICE_URL: http://product-service:3002
+      PAYMENT_SERVICE_URL: http://payment-service:3005
+      REQUEST_TIMEOUT_MS: "5000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3004/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 25s
+
+  payment-service:
+    <<: *service
+    build: ./services/payment-service
+    environment:
+      NODE_ENV: production
+      PORT: "3005"
+      DATABASE_URL: postgresql://payment_svc:${PAYMENT_DB_PASSWORD}@postgres:5432/payment_db?schema=public
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:8081}
+      # Demo bank: see services/payment-service/README.md
+      PAYMENT_DEMO_DELAY_MS: ${PAYMENT_DEMO_DELAY_MS:-300}
+      PAYMENT_DEMO_FAIL_RATE: ${PAYMENT_DEMO_FAIL_RATE:-0}
+      PAYMENT_DEMO_MAX_AMOUNT: ${PAYMENT_DEMO_MAX_AMOUNT:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3005/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 25s
+
+  tutorial-service:
+    <<: *service
+    build: ./services/tutorial-service
+    environment:
+      NODE_ENV: production
+      PORT: "3006"
+      DATABASE_URL: postgresql://tutorial_svc:${TUTORIAL_DB_PASSWORD}@postgres:5432/tutorial_db?schema=public
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3006/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 25s
+
+  api-gateway:
+    restart: unless-stopped
+    build: ./api-gateway
+    environment:
+      NODE_ENV: production
+      PORT: "8080"
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:8081}
+      # Number of reverse proxies in front of the gateway (frontend nginx = 1; + Caddy on a server = 2).
+      # Without this every visitor shares ONE rate-limit bucket (the proxy's IP).
+      TRUST_PROXY: ${TRUST_PROXY:-1}
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-500}
+      USER_SERVICE_URL: http://user-service:3001
+      PRODUCT_SERVICE_URL: http://product-service:3002
+      CART_SERVICE_URL: http://cart-service:3003
+      ORDER_SERVICE_URL: http://order-service:3004
+      PAYMENT_SERVICE_URL: http://payment-service:3005
+      TUTORIAL_SERVICE_URL: http://tutorial-service:3006
+    depends_on:
+      user-service:
+        condition: service_healthy
+      product-service:
+        condition: service_healthy
+      cart-service:
+        condition: service_healthy
+      order-service:
+        condition: service_healthy
+      payment-service:
+        condition: service_healthy
+      tutorial-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 10s
+    networks: [edge, backend]
+
+  frontend:
+    restart: unless-stopped
+    build: ./frontend
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    networks: [edge]
+
+networks:
+  edge:
+  backend:
+
+volumes:
+  pgdata:

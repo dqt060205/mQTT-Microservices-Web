@@ -6,6 +6,8 @@ import Cart from './pages/Cart.jsx';
 import Checkout from './pages/Checkout.jsx';
 import Orders from './pages/Orders.jsx';
 import Login from './pages/Login.jsx';
+import AdminProducts from './pages/AdminProducts.jsx';
+import AdminProductForm from './components/AdminProductForm.jsx';
 import { useAuth } from './context/AuthContext.jsx';
 
 function RequireAuth({ children }) {
@@ -13,6 +15,14 @@ function RequireAuth({ children }) {
   const location = useLocation();
   if (loading) return <p className="state">Loading…</p>;
   return user ? children : <Navigate to="/login" state={{ from: location.pathname }} replace />;
+}
+
+function RequireAdmin({ children }) {
+  const { user, loading } = useAuth();
+  const location = useLocation();
+  if (loading) return <p className="state">Loading…</p>;
+  if (!user) return <Navigate to="/login" state={{ from: location.pathname }} replace />;
+  return user.role === 'admin' ? children : <p className="state">Administrator permission is required.</p>;
 }
 
 export default function App() {
@@ -27,6 +37,9 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/checkout" element={<RequireAuth><Checkout /></RequireAuth>} />
           <Route path="/orders" element={<RequireAuth><Orders /></RequireAuth>} />
+          <Route path="/admin/products" element={<RequireAdmin><AdminProducts /></RequireAdmin>} />
+          <Route path="/admin/products/new" element={<RequireAdmin><AdminProductForm /></RequireAdmin>} />
+          <Route path="/admin/products/:id/edit" element={<RequireAdmin><AdminProductForm /></RequireAdmin>} />
           <Route path="*" element={<p className="state">Page not found.</p>} />
         </Routes>
       </main>

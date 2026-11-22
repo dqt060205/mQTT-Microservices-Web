@@ -1,0 +1,6 @@
+# Scripts and Dockerfiles run inside Linux containers: they must keep LF line endings,
+# even when Git on Windows would convert them to CRLF (that breaks `#!/bin/sh`).
+*.sh         text eol=lf
+Dockerfile   text eol=lf
+*.yaml       text eol=lf
+*.yml        text eol=lf
