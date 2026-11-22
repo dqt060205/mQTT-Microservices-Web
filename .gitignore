@@ -1,0 +1,15 @@
+node_modules/
+dist/
+coverage/
+*.log
+
+# secrets
+.env
+.env.*
+!.env.example
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json

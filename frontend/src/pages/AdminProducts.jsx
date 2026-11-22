@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import api from '../../api';
-import ProductImage from '../../components/ProductImage.jsx';
-import Pagination from '../../components/Pagination.jsx';
-import { categoryOf, formatPrice } from '../../utils/format.js';
+import api from '../api';
+import ProductImage from '../components/ProductImage.jsx';
+import Pagination from '../components/Pagination.jsx';
+import { categoryOf, formatPrice } from '../utils/format.js';
 
 const PAGE_SIZE = 10;
 

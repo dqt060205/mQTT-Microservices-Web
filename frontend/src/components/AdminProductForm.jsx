@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import api from '../../api';
+import api from '../api';
 
 const EMPTY = { name: '', sku: '', description: '', price: '', stock: '0', imageUrl: '', categoryId: '' };
 

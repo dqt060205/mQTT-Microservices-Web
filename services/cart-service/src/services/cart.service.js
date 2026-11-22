@@ -10,20 +10,30 @@ function createCartService({ prisma, productClient }) {
 
   async function getCart(userId, token) {
     const cart = await getCartRecord(userId);
-    const items = await Promise.all((cart?.items || []).map(async (item) => {
-      const product = await productClient.getProduct(item.productId, token);
+    const items = (await Promise.all((cart?.items || []).map(async (item) => {
+      let product;
+      try {
+        product = await productClient.getProduct(item.productId, token);
+      } catch (err) {
+        // A product deleted after it was added must not make the whole cart unreadable.
+        if (err.status === 404) return null;
+        throw err;
+      }
       return {
         id: item.id,
         productId: item.productId,
         quantity: item.quantity,
         product: {
+          id: item.productId,
           name: product.name,
           price: Number(product.price),
+          ...(Number.isFinite(Number(product.stock)) ? { stock: Number(product.stock) } : {}),
           ...(product.imageUrl ? { imageUrl: product.imageUrl } : {}),
+          ...(product.category?.name ? { category: { name: product.category.name } } : {}),
         },
         subtotal: Number(product.price) * item.quantity,
       };
-    }));
+    }))).filter(Boolean);
 
     return {
       id: cart?.id ?? null,

@@ -48,6 +48,9 @@ export default function Header() {
         ) : (
           <Link to="/login" className="navitem"><small>Hello, sign in</small><b>Account</b></Link>
         )}
+        {user?.role === 'admin' && (
+          <Link to="/admin/products" className="navitem"><small>Admin</small><b>Products</b></Link>
+        )}
         <Link to="/orders" className="navitem"><small>Returns</small><b>& Orders</b></Link>
         <Link to="/cart" className="cartlink" aria-label={`Cart, ${count} items`}>
           <span className="cartcount">{count}</span> 🛒 <b>Cart</b>
