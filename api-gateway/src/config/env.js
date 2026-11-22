@@ -6,6 +6,18 @@ export const config = {
   port: parseInt(process.env.PORT, 10) || 8080,
   nodeEnv: process.env.NODE_ENV || 'development',
   corsOrigin: process.env.CORS_ORIGIN || '*',
+  trustProxy:
+    process.env.TRUST_PROXY !== undefined
+      ? !isNaN(Number(process.env.TRUST_PROXY))
+        ? Number(process.env.TRUST_PROXY)
+        : process.env.TRUST_PROXY === 'true'
+          ? true
+          : process.env.TRUST_PROXY === 'false'
+            ? false
+            : process.env.TRUST_PROXY
+      : process.env.NODE_ENV === 'production'
+        ? 1
+        : false,
   proxyTimeout: parseInt(process.env.PROXY_TIMEOUT_MS, 10) || 10000,
   rateLimit: {
     windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS, 10) || 15 * 60 * 1000,
@@ -56,4 +68,3 @@ export const config = {
     },
   },
 };
-

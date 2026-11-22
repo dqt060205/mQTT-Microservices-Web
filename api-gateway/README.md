@@ -86,7 +86,8 @@ cp .env.example .env
 |---|---|---|
 | `PORT` | `8080` | Cổng lắng nghe của API Gateway |
 | `NODE_ENV` | `development` | Môi trường (`development` hoặc `production`) |
-| `CORS_ORIGIN` | `http://localhost:5173,http://localhost:3000` | Danh sách origin cho phép gọi CORS (hỗ trợ credentials) |
+| `TRUST_PROXY` | `1` | Số lượng reverse proxy phía trước (Frontend nginx = 1; + Caddy = 2) giúp rate limiting tính đúng IP khách |
+| `CORS_ORIGIN` | `http://localhost:5173,http://localhost:8081,http://localhost:3000` | Danh sách origin cho phép gọi CORS (hỗ trợ credentials) |
 | `PROXY_TIMEOUT_MS` | `10000` | Thời gian timeout khi proxy kết nối tới microservice (ms) |
 | `RATE_LIMIT_WINDOW_MS` | `900000` | Khung thời gian giới hạn request (15 phút) |
 | `RATE_LIMIT_MAX` | `500` | Số lượng request tối đa trên mỗi IP trong 1 khung thời gian |
@@ -102,14 +103,14 @@ cp .env.example .env
 ## 4. Tài liệu kiểm tra (Testing Guide & Checklist)
 
 ### 4.1 Chạy bộ kiểm thử tự động của Gateway
-Bộ test sử dụng Node.js test runner tích hợp (`node --test`), kiểm tra tự động **13 kịch bản**:
+Bộ test sử dụng Node.js test runner tích hợp (`node --test`), kiểm tra tự động **14 kịch bản**:
 
 ```bash
 cd api-gateway
 npm test
 ```
 
-Danh sách 13 kịch bản kiểm thử:
+Danh sách 14 kịch bản kiểm thử:
 1. `GET /`: Trả về metadata và đủ 6 microservices đã đăng ký.
 2. `GET /health`: Phản hồi `status: 'ok'` (HTTP 200).
 3. `GET /ready`: Phản hồi `status: 'ready'` (HTTP 200).
@@ -122,7 +123,8 @@ Danh sách 13 kịch bản kiểm thử:
 10. Proxy `payment-service`: Chuyển tiếp `/api/payments` kèm header `Idempotency-Key` và POST body.
 11. Proxy `tutorial-service`: Chuyển tiếp `/api/tutorials/product/:productId`.
 12. CORS preflight `OPTIONS`: Kiểm tra headers cho phép `Idempotency-Key`, `Authorization`, v.v.
-13. Bắt lỗi khi service đích offline: Trả về HTTP `503 SERVICE_UNAVAILABLE` có cấu trúc JSON và thông báo thân thiện.
+13. Truy vết phân tán: Gateway tự động sinh hoặc chuyển tiếp header `X-Request-Id` qua các service.
+14. Bắt lỗi khi service đích offline: Trả về HTTP `503 SERVICE_UNAVAILABLE` có cấu trúc JSON và thông báo thân thiện.
 
 ### 4.2 Kịch bản kiểm tra thủ công bằng cURL / Postman
 

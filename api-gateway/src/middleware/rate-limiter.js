@@ -8,6 +8,7 @@ export const rateLimiter = rateLimit({
   legacyHeaders: false,
   message: {
     success: false,
+    message: 'Đã vượt quá giới hạn số lượng yêu cầu. Vui lòng thử lại sau.',
     error: {
       code: 'TOO_MANY_REQUESTS',
       message: 'Đã vượt quá giới hạn số lượng yêu cầu. Vui lòng thử lại sau.',
@@ -19,4 +20,3 @@ export const rateLimiter = rateLimit({
     return path === '/' || path === '/health' || path === '/ready' || path === '/services/health';
   },
 });
-
