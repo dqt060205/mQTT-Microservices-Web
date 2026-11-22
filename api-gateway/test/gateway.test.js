@@ -196,6 +196,21 @@ describe('API Gateway Full Test Suite', () => {
     assert.ok(res.headers.get('access-control-allow-headers').includes('Idempotency-Key'));
   });
 
+  test('Gateway assigns and forwards X-Request-Id', async () => {
+    // 1. Without incoming X-Request-Id (Gateway generates UUID)
+    const res1 = await fetch(`${gatewayUrl}/health`);
+    assert.equal(res1.status, 200);
+    assert.ok(res1.headers.get('x-request-id'));
+
+    // 2. With client provided X-Request-Id (Gateway preserves it)
+    const clientTraceId = 'trace-client-12345';
+    const res2 = await fetch(`${gatewayUrl}/api/users/profile`, {
+      headers: { 'X-Request-Id': clientTraceId },
+    });
+    assert.equal(res2.status, 200);
+    assert.equal(res2.headers.get('x-request-id'), clientTraceId);
+  });
+
   test('Proxy returns 503 with friendly message when service is unreachable', async () => {
     // Đóng mock server của cart để mô phỏng dịch vụ bị ngắt kết nối
     await new Promise((resolve) => mockServers.cart.close(resolve));

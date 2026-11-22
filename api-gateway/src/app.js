@@ -2,6 +2,7 @@ import express from 'express';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import { config } from './config/env.js';
+import { requestIdMiddleware } from './middleware/request-id.js';
 import { buildCorsMiddleware } from './middleware/cors.js';
 import { rateLimiter } from './middleware/rate-limiter.js';
 import { notFoundHandler, errorHandler } from './middleware/error-handler.js';
@@ -11,8 +12,16 @@ import gatewayRoutes from './routes/gateway.routes.js';
 export function createApp() {
   const app = express();
 
+  // Cấu hình trust proxy khi đứng sau reverse proxy (nginx / Caddy / Cloudflare)
+  if (config.trustProxy !== false) {
+    app.set('trust proxy', config.trustProxy);
+  }
+
   // Tắt header X-Powered-By để bảo mật
   app.disable('x-powered-by');
+
+  // Gắn Request ID cho mỗi yêu cầu để phục vụ phân tán log
+  app.use(requestIdMiddleware);
 
   // Middleware bảo mật HTTP headers
   app.use(helmet());
@@ -47,4 +56,3 @@ export function createApp() {
 }
 
 export default createApp;
-
